@@ -27,7 +27,7 @@ function SplashScreen({ onComplete }: { onComplete: () => void }) {
         transition={{ duration: 1, type: "spring", bounce: 0.5 }}
         className="flex items-center gap-4"
       >
-        <Image src="/logo.png" alt="SpendSense" width={88} height={88} className="object-contain shrink-0 drop-shadow-[0_0_28px_rgba(255,255,255,0.45)]" />
+        <Image src="/logo.png" alt="SpendSense" width={88} height={88} className="object-contain shrink-0" />
         <motion.span 
           initial={{ clipPath: "inset(0 100% 0 0)" }}
           animate={{ clipPath: "inset(0 0% 0 0)" }}
@@ -69,7 +69,7 @@ export default function LandingPage() {
             {/* Logo */}
             <div className="flex items-center gap-2">
               <div className="w-10 h-10 rounded flex items-center justify-center overflow-hidden">
-                <Image src="/logo.png" alt="SpendSense" width={40} height={40} className="object-contain invert" />
+                <Image src="/logo.png" alt="SpendSense" width={40} height={40} className="object-contain" />
               </div>
               <span className="text-xl font-bold tracking-tight">SpendSense</span>
             </div>

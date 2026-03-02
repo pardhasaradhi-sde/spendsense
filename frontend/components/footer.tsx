@@ -33,7 +33,7 @@ export default function Footer() {
            
            {/* The massive SPENDSENSE block replacing LET'S TALK */}
            <div className="flex w-full overflow-hidden items-center justify-start lg:justify-end gap-3 md:gap-6">
-             <Image src="/logo.png" alt="SpendSense" width={88} height={88} className="hidden lg:block object-contain shrink-0 invert" />
+             <Image src="/logo.png" alt="SpendSense" width={88} height={88} className="hidden lg:block object-contain shrink-0" />
              <div className="flex-1 lg:flex-none min-w-0 max-w-full overflow-hidden">
                <h1 className="text-[12.5vw] sm:text-[11vw] md:text-[9vw] lg:text-[6vw] xl:text-[7vw] leading-[0.85] font-black tracking-tighter text-black uppercase text-left lg:text-right truncate break-keep">
                  Spendsense
