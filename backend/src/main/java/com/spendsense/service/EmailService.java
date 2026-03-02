@@ -23,7 +23,7 @@ public class EmailService {
 
     private final JavaMailSender mailSender;
 
-    @Value("${spring.mail.username:noreply@spendsense.com}")
+    @Value("${app.mail.from:noreply@spendsense.com}")
     private String fromEmail;
 
     /**
