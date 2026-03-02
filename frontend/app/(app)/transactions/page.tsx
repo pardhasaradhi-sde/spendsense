@@ -23,6 +23,14 @@ import type {
   TransactionResponse, Page, AccountResponse, CreateTransactionRequest,
   ReceiptScanResponse, RecurringInterval,
 } from "@/types/api";
+
+// ─── Quick account creation schema (used inside TransactionDialog) ─────────────
+const quickAccountSchema = z.object({
+  name: z.string().min(1, "Name is required").max(255),
+  type: z.enum(["CURRENT", "SAVINGS"]),
+  balance: z.coerce.number().min(0, "Cannot be negative"),
+});
+type QuickAccountForm = z.infer<typeof quickAccountSchema>;
 import * as Select from "@radix-ui/react-select";
 
 // ─── Form schema ─────────────────────────────────────────────────────────────
@@ -291,12 +299,19 @@ function FilterBar({
 
 function TransactionDialog({
   open, onClose, accounts, defaultAccountId, defaultValues, onSubmit, loading, onScanReceipt, scanning,
+  onCreateAccount, creatingAccount,
 }: {
   open: boolean; onClose: () => void; accounts: AccountResponse[];
   defaultAccountId?: string; defaultValues?: Partial<TxnForm>;
   onSubmit: (d: TxnForm) => void; loading: boolean;
   onScanReceipt: (f: File) => Promise<ReceiptScanResponse | null>; scanning: boolean;
+  onCreateAccount: (d: QuickAccountForm) => Promise<string | null>; creatingAccount: boolean;
 }) {
+  const [showCreateAccount, setShowCreateAccount] = useState(false);
+  const qaForm = useForm<QuickAccountForm>({
+    resolver: zodResolver(quickAccountSchema) as any,
+    defaultValues: { type: "CURRENT", balance: 0 },
+  });
   const { register, handleSubmit, watch, setValue, formState: { errors }, reset } = useForm<TxnForm>({
     resolver: zodResolver(txnSchema) as any,
     defaultValues: defaultValues ?? {
@@ -398,13 +413,83 @@ function TransactionDialog({
             </div>
             <div>
               <label className="text-[11px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)] block mb-1.5">Account</label>
-              <select {...register("accountId")} className="w-full border border-[var(--border)] rounded px-3 py-2.5 text-[13px] focus:outline-none focus:border-black bg-white">
-                <option value="">Select…</option>
-                {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
-              {errors.accountId && <p className="text-[11px] text-[var(--danger)] mt-1">Required</p>}
+              {accounts.length === 0 && !showCreateAccount ? (
+                <button
+                  type="button"
+                  onClick={() => setShowCreateAccount(true)}
+                  className="w-full border-2 border-dashed border-[var(--border)] rounded px-3 py-2.5 text-[12px] font-semibold text-[var(--muted-foreground)] hover:border-black hover:text-black transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Plus size={12} /> Create Account First
+                </button>
+              ) : !showCreateAccount ? (
+                <>
+                  <select {...register("accountId")} className="w-full border border-[var(--border)] rounded px-3 py-2.5 text-[13px] focus:outline-none focus:border-black bg-white">
+                    <option value="">Select…</option>
+                    {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateAccount(true)}
+                    className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-[var(--muted-foreground)] hover:text-black transition-colors"
+                  >
+                    <Plus size={10} /> New Account
+                  </button>
+                </>
+              ) : null}
+              {errors.accountId && !showCreateAccount && <p className="text-[11px] text-[var(--danger)] mt-1">Required</p>}
             </div>
           </div>
+
+          {/* ── Inline quick-create account form ─────────────────────────── */}
+          {showCreateAccount && (
+            <div className="border border-[var(--border)] rounded-lg p-4 space-y-3 bg-[var(--muted)]">
+              <div className="flex items-center justify-between">
+                <p className="text-[12px] font-bold uppercase tracking-widest">New Account</p>
+                <button type="button" onClick={() => setShowCreateAccount(false)}
+                  className="w-6 h-6 flex items-center justify-center rounded hover:bg-white text-[var(--muted-foreground)] hover:text-black"
+                ><X size={12} /></button>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <input
+                    {...qaForm.register("name")}
+                    placeholder="Account name (e.g. HDFC Savings)"
+                    className="w-full border border-[var(--border)] rounded px-3 py-2 text-[13px] focus:outline-none focus:border-black bg-white"
+                  />
+                  {qaForm.formState.errors.name && <p className="text-[11px] text-[var(--danger)] mt-1">{qaForm.formState.errors.name.message}</p>}
+                </div>
+                <div>
+                  <select {...qaForm.register("type")} className="w-full border border-[var(--border)] rounded px-3 py-2 text-[13px] focus:outline-none focus:border-black bg-white">
+                    <option value="CURRENT">Current</option>
+                    <option value="SAVINGS">Savings</option>
+                  </select>
+                </div>
+                <div>
+                  <input
+                    {...qaForm.register("balance")}
+                    type="number" step="0.01" placeholder="Starting balance"
+                    className="w-full border border-[var(--border)] rounded px-3 py-2 text-[13px] focus:outline-none focus:border-black bg-white"
+                  />
+                  {qaForm.formState.errors.balance && <p className="text-[11px] text-[var(--danger)] mt-1">{qaForm.formState.errors.balance.message}</p>}
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={creatingAccount}
+                onClick={qaForm.handleSubmit(async (d) => {
+                  const newId = await onCreateAccount(d);
+                  if (newId) {
+                    setValue("accountId", newId);
+                    setShowCreateAccount(false);
+                    qaForm.reset({ type: "CURRENT", balance: 0 });
+                  }
+                }) as any}
+                className="w-full bg-black text-white text-[12px] font-bold py-2 rounded hover:bg-neutral-800 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              >
+                {creatingAccount ? <><RefreshCw size={11} className="animate-spin" /> Creating…</> : <><Plus size={11} /> Create & Select</>}
+              </button>
+            </div>
+          )}
 
           <div>
             <label className="text-[11px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)] block mb-1.5">Description (optional)</label>
@@ -595,6 +680,20 @@ function TransactionsInner() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["txns-view"] }); qc.invalidateQueries({ queryKey: ["accounts"] }); toast.success("Added."); setDialogOpen(false); },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const createAccountMut = useMutation({
+    mutationFn: (d: QuickAccountForm) =>
+      apiFetch<AccountResponse>("/accounts", getToken, { method: "POST", body: JSON.stringify({ ...d, isDefault: accounts.length === 0 }) }),
+    onSuccess: (a) => { qc.invalidateQueries({ queryKey: ["accounts"] }); toast.success(`Account "${a.name}" created.`); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  async function handleCreateAccount(d: QuickAccountForm): Promise<string | null> {
+    try {
+      const acc = await createAccountMut.mutateAsync(d);
+      return acc.id;
+    } catch { return null; }
+  }
 
   const updateMut = useMutation({
     mutationFn: ({ id, d }: { id: string; d: Partial<CreateTransactionRequest> }) =>
@@ -892,6 +991,7 @@ function TransactionsInner() {
         defaultAccountId={scopedAccountId || undefined}
         onSubmit={submitCreate} loading={createMut.isPending}
         onScanReceipt={handleScanReceipt} scanning={scanning}
+        onCreateAccount={handleCreateAccount} creatingAccount={createAccountMut.isPending}
       />
       {editTxn && (
         <TransactionDialog
@@ -908,6 +1008,7 @@ function TransactionsInner() {
           })}
           loading={updateMut.isPending}
           onScanReceipt={handleScanReceipt} scanning={scanning}
+          onCreateAccount={handleCreateAccount} creatingAccount={createAccountMut.isPending}
         />
       )}
       <DeleteConfirmDialog 

@@ -148,7 +148,7 @@ export default function InsightsPage() {
     retry: false,
   });
 
-  const loading = loadingInsights;
+  const loading = loadingInsights || refreshing;
   const insights = qInsights;
   const hasData = !!insights;
 
@@ -196,7 +196,7 @@ export default function InsightsPage() {
             <h1 className="text-[28px] font-black tracking-tight">AI Insights</h1>
             <p className="text-[var(--muted-foreground)] text-sm mt-1">Powered by Google Gemini</p>
           </div>
-          <GeneratePrompt onGenerate={handleGenerate} loading={false} />
+          <GeneratePrompt onGenerate={handleGenerate} loading={loading} />
         </div>
       )}
 

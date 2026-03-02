@@ -93,15 +93,19 @@ gemini:
     insights-enabled: ${AI_INSIGHTS_ENABLED:true}
     receipt-scanning-enabled: ${AI_RECEIPT_SCANNING_ENABLED:true}
 
-# File Storage Configuration
+# File Upload Configuration
 file:
-  storage:
-    base-dir: ${FILE_STORAGE_DIR:./storage}
-    receipts-dir: ${FILE_STORAGE_DIR:./storage}/receipts
-    exports-dir: ${FILE_STORAGE_DIR:./storage}/exports
   upload:
     max-size-mb: 10
     allowed-types: image/jpeg,image/png,image/jpg,image/heic,image/webp,application/pdf
+
+# Appwrite Storage Configuration
+appwrite:
+  endpoint: ${APPWRITE_ENDPOINT:https://sgp.cloud.appwrite.io/v1}
+  project-id: ${APPWRITE_PROJECT_ID}
+  api-key: ${APPWRITE_API_KEY}
+  receipts-bucket-id: ${APPWRITE_RECEIPTS_BUCKET_ID}
+  exports-bucket-id: ${APPWRITE_EXPORTS_BUCKET_ID}
 
 clerk:
   webhook-secret: ${CLERK_WEBHOOK_SECRET}

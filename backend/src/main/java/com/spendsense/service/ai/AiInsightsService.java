@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -150,16 +151,34 @@ public class AiInsightsService {
             SpendingInsightResponse response = parseInsightsResponse(geminiClient.generateContent(prompt));
 
             // Persist to DB (upsert: update existing row or create new)
+            // Always re-query DB right before save to handle concurrent requests
+            // (two threads could both see Optional.empty() and both try to INSERT)
             User user = userRepository.findById(userId)
                     .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-            AiInsight insight = existing.orElse(AiInsight.builder().user(user).build());
+            AiInsight insight = aiInsightRepository.findByUserId(userId)
+                    .orElseGet(() -> AiInsight.builder().user(user).build());
             insight.setSummary(response.getSummary());
             insight.setRecommendations(toJson(response.getRecommendations()));
             insight.setPatterns(toJson(response.getPatterns()));
             insight.setTopCategories(toJson(response.getTopCategories()));
             insight.setExpiresAt(LocalDateTime.now().plusHours(INSIGHTS_TTL_HOURS));
-            aiInsightRepository.save(insight);
+
+            try {
+                aiInsightRepository.saveAndFlush(insight);
+            } catch (DataIntegrityViolationException race) {
+                // Narrow race window: another thread inserted between our re-query and save.
+                // Re-fetch the row that was just inserted and update it.
+                log.warn("[IDEMPOTENCY] Concurrent INSERT race for user: {} — re-fetching to update.", userId);
+                AiInsight conflicted = aiInsightRepository.findByUserId(userId)
+                        .orElseThrow(() -> new RuntimeException("Cannot resolve insight race condition", race));
+                conflicted.setSummary(response.getSummary());
+                conflicted.setRecommendations(toJson(response.getRecommendations()));
+                conflicted.setPatterns(toJson(response.getPatterns()));
+                conflicted.setTopCategories(toJson(response.getTopCategories()));
+                conflicted.setExpiresAt(LocalDateTime.now().plusHours(INSIGHTS_TTL_HOURS));
+                aiInsightRepository.save(conflicted);
+            }
 
             log.info("AI insights persisted to DB for user: {} (expires in {}h)", userId, INSIGHTS_TTL_HOURS);
             return response;

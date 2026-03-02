@@ -33,18 +33,17 @@ public class ReceiptScanningService {
         log.info("Scanning receipt for user: {}", userId);
 
         try {
-            // Store the receipt file
+            // Read bytes and MIME type directly from the uploaded file —
+            // no need to upload to Appwrite and download back just for AI scanning.
+            byte[] imageBytes = file.getBytes();
+            String mimeType = file.getContentType() != null ? file.getContentType() : "image/jpeg";
+
+            // Store the receipt in Appwrite (for later retrieval via /receipts/{filename})
             String storedFilename = fileStorageService.storeReceipt(file, userId);
 
-            // Get file bytes and MIME type for AI processing
-            byte[] imageBytes = fileStorageService.getReceiptBytes(storedFilename);
-            String mimeType = fileStorageService.getFileMimeType(storedFilename);
-
-            // Create AI prompt for receipt analysis
-            String prompt = buildReceiptPrompt();
-
             // Call Gemini Vision API
-            String aiResponse = geminiClient.generateContentWithImage(prompt, imageBytes, mimeType);
+            String aiResponse = geminiClient.generateContentWithImage(
+                    buildReceiptPrompt(), imageBytes, mimeType);
 
             // Parse response
             ReceiptScanResponse response = parseReceiptResponse(aiResponse);
