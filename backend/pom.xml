@@ -76,6 +76,17 @@
             <artifactId>caffeine</artifactId>
         </dependency>
 
+        <!-- Redis (Lettuce driver — used for AI insights 48h distributed cache) -->
+        		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-redis</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>com.fasterxml.jackson.datatype</groupId>
+			<artifactId>jackson-datatype-jsr310</artifactId>
+		</dependency>
+
         <!-- Actuator -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -182,9 +193,9 @@
                 <artifactId>flyway-maven-plugin</artifactId>
                 <version>11.3.4</version>
                 <configuration>
-                    <url>jdbc:postgresql://localhost:5432/spendsense_dev</url>
-                    <user>spendsense_user</user>
-                    <password>pardhasaradhi</password>
+                    <url>${flyway.url}</url>
+                    <user>${flyway.user}</user>
+                    <password>${flyway.password}</password>
                 </configuration>
             </plugin>
             <plugin>

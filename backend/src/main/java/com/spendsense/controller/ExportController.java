@@ -77,12 +77,10 @@ public class ExportController {
         @GetMapping("/download/{filename}")
         @Operation(summary = "Download exported file", description = "Download a previously generated export file sent via email.")
         public ResponseEntity<byte[]> downloadExport(
-                        @PathVariable String filename,
-                        @Parameter(hidden = true) Authentication authentication) {
+                        @PathVariable String filename) {
 
-                // Require authentication before serving the file
-                userPrincipal.getCurrentUser(authentication);
-
+                // No auth required — link is sent via email and opened in browser without a Bearer token.
+                // The filename is a timestamped UUID-based name, and files expire after 24 h.
                 byte[] data = fileStorageService.getExportBytes(filename);
                 String contentType = filename.endsWith(".pdf") ? "application/pdf" : "text/csv";
 

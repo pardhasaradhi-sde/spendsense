@@ -26,6 +26,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
     @Value("${rate-limit.enabled:true}")
     private boolean rateLimitEnabled;
 
+    @Value("${app.trust-x-forwarded-for:false}")
+    private boolean trustXForwardedFor;
+
     @Override
     protected void doFilterInternal(
             HttpServletRequest request,
@@ -60,14 +63,16 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
     private String getClientIdentifier(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty()) {
-            ip = request.getRemoteAddr();
+        if (trustXForwardedFor) {
+            String ip = request.getHeader("X-Forwarded-For");
+            if (ip != null && !ip.isEmpty()) {
+                // Use only the first IP (original client) in the forwarded chain
+                if (ip.contains(",")) {
+                    ip = ip.split(",")[0].trim();
+                }
+                return "ip:" + ip;
+            }
         }
-        // Use only the first IP if comma-separated (proxy chain)
-        if (ip != null && ip.contains(",")) {
-            ip = ip.split(",")[0].trim();
-        }
-        return "ip:" + ip;
+        return "ip:" + request.getRemoteAddr();
     }
 }

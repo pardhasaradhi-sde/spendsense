@@ -6,6 +6,7 @@ import com.spendsense.model.enums.TransactionType;
 import com.spendsense.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
@@ -28,11 +29,11 @@ public class AnalyticsService {
     private final TransactionRepository transactionRepository;
 
     /**
-     * Get comprehensive analytics dashboard data
-     * Cached for 24 hours to improve performance
+     * Get comprehensive analytics dashboard data (cached for 24h)
      */
-    @Cacheable(value = "analyticsCache", key = "#userId + '_' + #months")
+    @Cacheable(value = "analyticsCache", key = "#userId.toString() + '-' + #months")
     public AnalyticsResponse getAnalytics(UUID userId, int months) {
+        log.info("[CACHE LAYER] ❌ Redis MISS for analytics ({} months). Calculating from DB...", months);
         log.info("Generating analytics for user: {} for last {} months", userId, months);
 
         LocalDateTime startDate = LocalDateTime.now().minusMonths(months);
@@ -52,6 +53,15 @@ public class AnalyticsService {
                 .periodStart(startDate)
                 .periodEnd(LocalDateTime.now())
                 .build();
+    }
+
+    /**
+     * Force refresh analytics by evicting the cache and regenerating
+     */
+    @CacheEvict(value = "analyticsCache", key = "#userId.toString() + '-' + #months")
+    public AnalyticsResponse refreshAnalytics(UUID userId, int months) {
+        log.info("Force refreshing analytics cache for user: {} ({} months)", userId, months);
+        return getAnalytics(userId, months);
     }
 
     /**
@@ -132,8 +142,7 @@ public class AnalyticsService {
                 .filter(t -> t.getType() == TransactionType.EXPENSE)
                 .collect(Collectors.groupingBy(
                         t -> t.getCategory() != null ? t.getCategory() : "Uncategorized",
-                        Collectors.reducing(BigDecimal.ZERO, Transaction::getAmount, BigDecimal::add)
-                ));
+                        Collectors.reducing(BigDecimal.ZERO, Transaction::getAmount, BigDecimal::add)));
     }
 
     private Map<String, BigDecimal> getMonthlyTrends(List<Transaction> transactions) {
@@ -143,12 +152,9 @@ public class AnalyticsService {
                 .filter(t -> t.getType() == TransactionType.EXPENSE)
                 .collect(Collectors.groupingBy(
                         t -> YearMonth.from(t.getDate()),
-                        Collectors.reducing(BigDecimal.ZERO, Transaction::getAmount, BigDecimal::add)
-                ));
+                        Collectors.reducing(BigDecimal.ZERO, Transaction::getAmount, BigDecimal::add)));
 
-        monthlyExpenses.forEach((yearMonth, amount) ->
-            trends.put(yearMonth.toString(), amount)
-        );
+        monthlyExpenses.forEach((yearMonth, amount) -> trends.put(yearMonth.toString(), amount));
 
         return trends;
     }

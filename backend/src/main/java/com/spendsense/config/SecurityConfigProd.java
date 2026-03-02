@@ -58,6 +58,8 @@ public class SecurityConfigProd {
                         .requestMatchers("/health").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
                         .requestMatchers("/webhooks/**").permitAll()
+                        // Export download links are sent via email and opened in browser — no Bearer token available
+                        .requestMatchers("/export/download/**").permitAll()
                         // Swagger UI is DISABLED in production
                         .requestMatchers("/swagger-ui/**", "/api-docs/**",
                                 "/swagger-ui.html", "/v3/api-docs/**")

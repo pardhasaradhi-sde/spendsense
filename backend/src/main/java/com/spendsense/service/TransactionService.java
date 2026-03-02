@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -34,23 +35,23 @@ public class TransactionService {
     private final TransactionMapper transactionMapper;
 
     public TransactionResponse createTransaction(UUID userId, CreateTransactionRequest request) {
-        User user=userRepository.findById(userId)
-                .orElseThrow(()->new ResourceNotFoundException("User not found"));
-        Account account=accountRepository.findByIdAndUserId(request.getAccountId(),userId)
-                .orElseThrow(()->new ResourceNotFoundException("Account not found"));
-        Transaction transaction=transactionMapper.toEntity(request);
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        Account account = accountRepository.findByIdAndUserId(request.getAccountId(), userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Account not found"));
+        Transaction transaction = transactionMapper.toEntity(request);
         transaction.setUser(user);
         transaction.setAccount(account);
-        if(Boolean.TRUE.equals(request.getIsRecurring())) {
+        if (Boolean.TRUE.equals(request.getIsRecurring())) {
             if (request.getDate() == null || request.getRecurringInterval() == null) {
-                throw new InvalidRecurringTransactionException("Recurring transaction requires date and recurringInterval");
+                throw new InvalidRecurringTransactionException(
+                        "Recurring transaction requires date and recurringInterval");
             }
             transaction.setNextRecurringDate(calculateNextRecurringDate(
-                    request.getDate(),request.getRecurringInterval()
-            ));
+                    request.getDate(), request.getRecurringInterval()));
         }
-        updateAccountBalance(account,transaction);
-        Transaction saved=transactionRepository.save(transaction);
+        updateAccountBalance(account, transaction);
+        Transaction saved = transactionRepository.save(transaction);
         return transactionMapper.toResponse(saved);
     }
 
@@ -61,14 +62,14 @@ public class TransactionService {
     }
 
     @Transactional(readOnly = true)
-    public Page<TransactionResponse> getAccountTransactions(UUID userId,UUID accountId, Pageable
-            pageable) {
+    public Page<TransactionResponse> getAccountTransactions(UUID userId, UUID accountId, Pageable pageable) {
         // Verify account exists and belongs to user
-        accountRepository.findByIdAndUserId(accountId,userId)
-                .orElseThrow(()->new ResourceNotFoundException("Account not found"));
-        return transactionRepository.findByAccountIdAndUserId(accountId,userId,pageable)
+        accountRepository.findByIdAndUserId(accountId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Account not found"));
+        return transactionRepository.findByAccountIdAndUserId(accountId, userId, pageable)
                 .map(transactionMapper::toResponse);
     }
+
     @Transactional(readOnly = true)
     public TransactionResponse getTransaction(UUID userId, UUID transactionId) {
         Transaction transaction = transactionRepository.findByIdAndUserId(transactionId, userId)
@@ -79,83 +80,76 @@ public class TransactionService {
     public TransactionResponse updateTransaction(UUID userId, UUID transactionId, UpdateTransactionRequest request) {
         Transaction transaction = transactionRepository.findByIdAndUserId(transactionId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Transaction not found"));
-        revertAccountBalance(transaction.getAccount(),transaction);
-        if(request.getType()!=null)
-        {
+        revertAccountBalance(transaction.getAccount(), transaction);
+        if (request.getType() != null) {
             transaction.setType(request.getType());
         }
-        if(request.getAmount()!=null)
-        {
+        if (request.getAmount() != null) {
             transaction.setAmount(request.getAmount());
         }
-        if(request.getDescription()!=null)
-        {
+        if (request.getDescription() != null) {
             transaction.setDescription(request.getDescription());
         }
-        if(request.getDate()!=null)
-        {
+        if (request.getDate() != null) {
             transaction.setDate(request.getDate());
         }
-        if(request.getCategory()!=null)
-        {
+        if (request.getCategory() != null) {
             transaction.setCategory(request.getCategory());
         }
-        if(request.getReceiptUrl()!=null)
-        {
+        if (request.getReceiptUrl() != null) {
             transaction.setReceiptUrl(request.getReceiptUrl());
         }
-        if(Boolean.TRUE.equals(request.getIsRecurring())) {
+        if (Boolean.TRUE.equals(request.getIsRecurring())) {
             if (request.getDate() == null || request.getRecurringInterval() == null) {
-                throw new InvalidRecurringTransactionException("Recurring transaction requires date and recurringInterval");
+                throw new InvalidRecurringTransactionException(
+                        "Recurring transaction requires date and recurringInterval");
             }
             transaction.setNextRecurringDate(calculateNextRecurringDate(
-                    request.getDate(),request.getRecurringInterval()
-            ));
+                    request.getDate(), request.getRecurringInterval()));
         }
-        updateAccountBalance(transaction.getAccount(),transaction);
-        Transaction saved=transactionRepository.save(transaction);
+        updateAccountBalance(transaction.getAccount(), transaction);
+        Transaction saved = transactionRepository.save(transaction);
         return transactionMapper.toResponse(saved);
     }
 
     public void deleteTransaction(UUID userId, UUID transactionId) {
-        Transaction transaction=transactionRepository.findByIdAndUserId(transactionId,userId)
-                .orElseThrow(()->new ResourceNotFoundException("Transaction not found"));
-        revertAccountBalance(transaction.getAccount(),transaction);
+        Transaction transaction = transactionRepository.findByIdAndUserId(transactionId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Transaction not found"));
+        revertAccountBalance(transaction.getAccount(), transaction);
         transactionRepository.delete(transaction);
     }
+
     private void revertAccountBalance(Account account, Transaction transaction) {
-        BigDecimal currentBalance=account.getBalance();
+        BigDecimal currentBalance = account.getBalance();
         BigDecimal newBalance;
-        if(transaction.getType()==TransactionType.INCOME)
-        {
-            newBalance=currentBalance.subtract(transaction.getAmount());
-        }
-        else{
-            newBalance=currentBalance.add(transaction.getAmount());
+        if (transaction.getType() == TransactionType.INCOME) {
+            newBalance = currentBalance.subtract(transaction.getAmount());
+        } else {
+            newBalance = currentBalance.add(transaction.getAmount());
         }
         account.setBalance(newBalance);
         accountRepository.save(account);
     }
 
     private void updateAccountBalance(Account account, Transaction transaction) {
-        BigDecimal currentBalance=account.getBalance();
+        BigDecimal currentBalance = account.getBalance();
         BigDecimal newBalance;
-        if(transaction.getType()== TransactionType.INCOME){
-            newBalance=currentBalance.add(transaction.getAmount());
-        }
-        else{
-            newBalance=currentBalance.subtract(transaction.getAmount());
+        if (transaction.getType() == TransactionType.INCOME) {
+            newBalance = currentBalance.add(transaction.getAmount());
+        } else {
+            newBalance = currentBalance.subtract(transaction.getAmount());
         }
         account.setBalance(newBalance);
         accountRepository.save(account);
     }
 
     private LocalDateTime calculateNextRecurringDate(LocalDateTime date, RecurringInterval recurringInterval) {
-        return switch(recurringInterval){
-            case DAILY ->  date.plusDays(1);
-            case WEEKLY ->  date.plusWeeks(1);
-            case MONTHLY ->  date.plusMonths(1);
-            case YEARLY -> date.plusYears(1);
+        LocalDate d = date.toLocalDate();
+        return switch (recurringInterval) {
+            case DAILY -> d.plusDays(1).atStartOfDay();
+            case WEEKLY -> d.plusWeeks(1).atStartOfDay();
+            case MONTHLY -> d.plusMonths(1).atStartOfDay();
+            case YEARLY -> d.plusYears(1).atStartOfDay();
         };
     }
 

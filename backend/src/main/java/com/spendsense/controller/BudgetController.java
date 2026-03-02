@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -28,7 +29,7 @@ public class BudgetController {
     @PostMapping
     @Operation(summary = "Create a new budget", description = "Creates a new budget for the user")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Budget created successfully"),
+            @ApiResponse(responseCode = "201", description = "Budget created successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid request"),
             @ApiResponse(responseCode = "401", description = "Unauthorized")
     })
@@ -38,7 +39,7 @@ public class BudgetController {
             ){
         User user=userPrincipal.getCurrentUser(authentication);
         BudgetResponse response=budgetService.createBudget(user.getId(),request);
-        return ResponseEntity.ok(response);
+        return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
 
     @GetMapping

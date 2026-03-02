@@ -55,9 +55,24 @@ spring:
           writetimeout: 5000
     # Cache Configuration
   cache:
-    type: caffeine
-    caffeine:
-      spec: maximumSize=500,expireAfterWrite=24h
+    type: redis
+    redis:
+      time-to-live: 86400000 # 24h default
+
+  # Redis — Docker locally, Upstash in prod (set via env)
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      ssl:
+        enabled: ${REDIS_SSL_ENABLED:false}
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 4
+          min-idle: 1
 
   #flyway configuration
   flyway:
@@ -95,7 +110,7 @@ clerk:
 scheduling:
   enabled: ${SCHEDULING_ENABLED:true}
   recurring-transactions:
-    cron: "0 0 2 * * ?" # Daily at 2 AM
+    cron: "0 0 */6 * * ?" # Every 6 hours — catches daily recurring txns even after dev restarts
   budget-alerts:
     cron: "0 0 8 * * ?" # Daily at 8 AM
   cleanup:
@@ -114,6 +129,14 @@ export:
 rate-limit:
   enabled: ${RATE_LIMIT_ENABLED}
   requests-per-minute: ${RATE_LIMIT_RPM}
+
+# Trust the X-Forwarded-For header for real client IP.
+# Set to true ONLY when the app is behind a trusted reverse proxy (Nginx, Render, Railway, etc.).
+# Leave false when running without a proxy to prevent IP spoofing.
+app:
+  trust-x-forwarded-for: ${TRUST_X_FORWARDED_FOR:false}
+  frontend-url: ${APP_FRONTEND_URL:http://localhost:3000}
+  backend-url: ${APP_BACKEND_URL:http://localhost:8080}
 
 #server configuration
 server:

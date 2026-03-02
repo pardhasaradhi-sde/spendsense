@@ -24,7 +24,7 @@ public class User {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(unique = true,nullable = false)
+    @Column(unique = true, nullable = false)
     private String clerkUserId;
 
     @Column(unique = true) // nullable by default
@@ -36,27 +36,25 @@ public class User {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private UserRole role=UserRole.USER;
+    private UserRole role = UserRole.USER;
 
     @JsonIgnore
-    @OneToMany(mappedBy = "user",cascade = CascadeType.ALL,orphanRemoval = true)
-    private List<Transaction> transactions=new ArrayList<>();
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Transaction> transactions = new ArrayList<>();
 
     @JsonIgnore
-    @OneToMany(mappedBy = "user",cascade = CascadeType.ALL,orphanRemoval = true)
-    private List<Account> accounts=new ArrayList<>();
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Account> accounts = new ArrayList<>();
 
     @JsonIgnore
-    @OneToOne(mappedBy = "user",cascade = CascadeType.ALL,orphanRemoval = true)
+    @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private Budget budget;
 
     @CreationTimestamp
-    @Column(nullable = false,updatable = false)
-    private LocalDateTime  createdAt;
+    @Column(nullable = false, updatable = false)
+    private LocalDateTime createdAt;
 
     @UpdateTimestamp
     @Column(nullable = false)
     private LocalDateTime updatedAt;
-
-
 }

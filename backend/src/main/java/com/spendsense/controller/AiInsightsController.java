@@ -23,28 +23,33 @@ public class AiInsightsController {
     private final UserPrincipal userPrincipal;
 
     @GetMapping
-    @Operation(summary = "Get AI spending insights",
-            description = "Get personalized AI-powered spending analysis and recommendations")
+    @Operation(summary = "Get AI spending insights", description = "Returns cached (Redis 48h → DB 48h) insights, or generates fresh from Gemini")
     public ResponseEntity<SpendingInsightResponse> getSpendingInsights(Authentication authentication) {
-        User user=userPrincipal.getCurrentUser(authentication);
+        User user = userPrincipal.getCurrentUser(authentication);
         SpendingInsightResponse insights = aiInsightsService.generateSpendingInsights(user.getId());
         return ResponseEntity.ok(insights);
     }
 
+    @PostMapping("/refresh")
+    @Operation(summary = "Refresh AI spending insights", description = "Evicts Redis cache + deletes DB row, then regenerates fresh insights from Gemini")
+    public ResponseEntity<SpendingInsightResponse> refreshSpendingInsights(Authentication authentication) {
+        User user = userPrincipal.getCurrentUser(authentication);
+        SpendingInsightResponse insights = aiInsightsService.refreshSpendingInsights(user.getId());
+        return ResponseEntity.ok(insights);
+    }
+
     @GetMapping("/anomalies")
-    @Operation(summary = "Detect spending anomalies",
-            description = "Use AI to detect unusual spending patterns")
+    @Operation(summary = "Detect spending anomalies", description = "Use AI to detect unusual spending patterns")
     public ResponseEntity<List<String>> detectAnomalies(Authentication authentication) {
-        User user=userPrincipal.getCurrentUser(authentication);
+        User user = userPrincipal.getCurrentUser(authentication);
         List<String> anomalies = aiInsightsService.detectAnomalies(user.getId());
         return ResponseEntity.ok(anomalies);
     }
 
     @GetMapping("/recommendations")
-    @Operation(summary = "Get budget recommendations",
-            description = "Get AI-generated budget recommendations based on spending patterns")
+    @Operation(summary = "Get budget recommendations", description = "Get AI-generated budget recommendations based on spending patterns")
     public ResponseEntity<List<String>> getBudgetRecommendations(Authentication authentication) {
-        User user=userPrincipal.getCurrentUser(authentication);
+        User user = userPrincipal.getCurrentUser(authentication);
         List<String> recommendations = aiInsightsService.generateBudgetRecommendations(user.getId());
         return ResponseEntity.ok(recommendations);
     }

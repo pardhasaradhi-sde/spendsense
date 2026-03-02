@@ -1,28 +1,43 @@
 package com.spendsense.service.ai;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.spendsense.dto.response.SpendingInsightResponse;
-import com.spendsense.model.Transaction;
+import com.spendsense.model.AiInsight;
 import com.spendsense.model.Budget;
+import com.spendsense.model.Transaction;
+import com.spendsense.model.User;
 import com.spendsense.model.enums.TransactionType;
-import com.spendsense.repository.TransactionRepository;
+import com.spendsense.repository.AiInsightRepository;
 import com.spendsense.repository.BudgetRepository;
+import com.spendsense.repository.TransactionRepository;
+import com.spendsense.repository.UserRepository;
+import com.spendsense.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * AI-powered spending insights service using Gemini
+ * AI-powered spending insights service using Gemini.
+ *
+ * Persistence strategy (3-layer):
+ * 1. @Cacheable("aiInsights") → Redis 48h TTL
+ * 2. DB (ai_insights table) → checked on Redis miss, valid for 48h after
+ * generation
+ * 3. Gemini API call → only on DB miss or expired row
  */
 @Service
 @Slf4j
@@ -32,18 +47,91 @@ public class AiInsightsService {
     private final GeminiClientService geminiClient;
     private final TransactionRepository transactionRepository;
     private final BudgetRepository budgetRepository;
+    private final AiInsightRepository aiInsightRepository;
+    private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
 
-    /**
-     * Generate personalized spending insights for a user
-     * Cached for 24 hours to reduce API calls
-     */
-    @Cacheable(value = "spendingInsights", key = "#userId")
-    public SpendingInsightResponse generateSpendingInsights(UUID userId) {
-        log.info("Generating AI spending insights for user: {}", userId);
+    private static final int INSIGHTS_TTL_HOURS = 48;
 
+    // ==================== Main Insights ====================
+
+    /**
+     * Get spending insights for a user.
+     * Lookup order: Redis (48h TTL) → DB (expiresAt check) → Gemini API
+     */
+    @Cacheable(value = "aiInsights", key = "#userId.toString()")
+    @Transactional
+    public SpendingInsightResponse generateSpendingInsights(UUID userId) {
+        log.info("[CACHE LAYER] ❌ Redis MISS for user: {}. Checking Database...", userId);
+
+        // DB check: valid (non-expired) row?
+        Optional<AiInsight> existing = aiInsightRepository.findByUserId(userId);
+        if (existing.isPresent() && existing.get().getExpiresAt().isAfter(LocalDateTime.now())) {
+            log.info("[CACHE LAYER] ✅ Database HIT for user: {} (expires: {})", userId, existing.get().getExpiresAt());
+            return toResponse(existing.get());
+        }
+
+        log.info("[CACHE LAYER] ❌ Database MISS/EXPIRED. Calling Gemini API... \uD83E\uDD16");
+        // Both miss — call Gemini
+        return generateAndPersist(userId, existing);
+    }
+
+    /**
+     * Force-refresh insights: evict Redis, delete DB row, regenerate via Gemini.
+     * Called by POST /ai/insights/refresh
+     */
+    @CacheEvict(value = "aiInsights", key = "#userId.toString()")
+    @Transactional
+    public SpendingInsightResponse refreshSpendingInsights(UUID userId) {
+        log.info("Force refreshing AI insights for user: {}", userId);
+        aiInsightRepository.deleteByUserId(userId);
+        return generateAndPersist(userId, Optional.empty());
+    }
+
+    // ==================== Anomaly Detection & Budget Recommendations
+    // ====================
+
+    public List<String> detectAnomalies(UUID userId) {
+        log.info("Detecting spending anomalies for user: {}", userId);
         try {
-            // Fetch last 90 days of transactions
+            LocalDateTime startDate = LocalDateTime.now().minusDays(30);
+            List<Transaction> transactions = transactionRepository
+                    .findByUserIdAndDateAfterOrderByDateDesc(userId, startDate);
+            if (transactions.size() < 10) {
+                return List.of("Need more transaction data to detect anomalies (at least 10 transactions)");
+            }
+            String ctx = buildCompactContext(transactions, budgetRepository.findByUserId(userId).orElse(null));
+            String prompt = "Financial advisor. Analyze this user data and return JSON array ONLY (no markdown):\n"
+                    + ctx +
+                    "\nReturn a JSON array of 2-4 anomaly description strings: [\"anomaly1\",\"anomaly2\"]";
+            return parseJsonArray(geminiClient.generateContent(prompt));
+        } catch (Exception e) {
+            log.error("Error detecting anomalies for user: {}", userId, e);
+            return List.of("Unable to detect anomalies at this time");
+        }
+    }
+
+    public List<String> generateBudgetRecommendations(UUID userId) {
+        log.info("Generating budget recommendations for user: {}", userId);
+        try {
+            LocalDateTime startDate = LocalDateTime.now().minusDays(90);
+            List<Transaction> transactions = transactionRepository
+                    .findByUserIdAndDateAfterOrderByDateDesc(userId, startDate);
+            Budget budget = budgetRepository.findByUserId(userId).orElse(null);
+            String ctx = buildCompactContext(transactions, budget);
+            String prompt = "Give 3-5 specific budget recommendations. Data:\n" + ctx +
+                    "\nReturn JSON array only (no markdown): [\"tip1\",\"tip2\"]";
+            return parseJsonArray(geminiClient.generateContent(prompt));
+        } catch (Exception e) {
+            log.error("Error generating budget recommendations for user: {}", userId, e);
+            return List.of("Unable to generate recommendations at this time");
+        }
+    }
+
+    // ==================== Private: Generate & Persist ====================
+
+    private SpendingInsightResponse generateAndPersist(UUID userId, Optional<AiInsight> existing) {
+        try {
             LocalDateTime startDate = LocalDateTime.now().minusDays(90);
             List<Transaction> transactions = transactionRepository
                     .findByUserIdAndDateAfterOrderByDateDesc(userId, startDate);
@@ -55,13 +143,26 @@ public class AiInsightsService {
                         .build();
             }
 
-            // Compact JSON context — only send what Gemini needs
             Budget budget = budgetRepository.findByUserId(userId).orElse(null);
             String ctx = buildCompactContext(transactions, budget);
             String prompt = buildInsightsPrompt(ctx);
 
-            // Get AI response and parse
-            return parseInsightsResponse(geminiClient.generateContent(prompt));
+            SpendingInsightResponse response = parseInsightsResponse(geminiClient.generateContent(prompt));
+
+            // Persist to DB (upsert: update existing row or create new)
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+            AiInsight insight = existing.orElse(AiInsight.builder().user(user).build());
+            insight.setSummary(response.getSummary());
+            insight.setRecommendations(toJson(response.getRecommendations()));
+            insight.setPatterns(toJson(response.getPatterns()));
+            insight.setTopCategories(toJson(response.getTopCategories()));
+            insight.setExpiresAt(LocalDateTime.now().plusHours(INSIGHTS_TTL_HOURS));
+            aiInsightRepository.save(insight);
+
+            log.info("AI insights persisted to DB for user: {} (expires in {}h)", userId, INSIGHTS_TTL_HOURS);
+            return response;
 
         } catch (Exception e) {
             log.error("Error generating AI insights for user: {}", userId, e);
@@ -71,70 +172,39 @@ public class AiInsightsService {
         }
     }
 
-    /**
-     * Detect spending anomalies using AI
-     */
-    public List<String> detectAnomalies(UUID userId) {
-        log.info("Detecting spending anomalies for user: {}", userId);
+    // ==================== Mapping ====================
 
+    private SpendingInsightResponse toResponse(AiInsight insight) {
+        return SpendingInsightResponse.builder()
+                .summary(insight.getSummary())
+                .recommendations(fromJson(insight.getRecommendations()))
+                .patterns(fromJson(insight.getPatterns()))
+                .topCategories(fromJson(insight.getTopCategories()))
+                .build();
+    }
+
+    private String toJson(List<String> list) {
         try {
-            LocalDateTime startDate = LocalDateTime.now().minusDays(30);
-            List<Transaction> transactions = transactionRepository
-                    .findByUserIdAndDateAfterOrderByDateDesc(userId, startDate);
-
-            if (transactions.size() < 10) {
-                return List.of("Need more transaction data to detect anomalies");
-            }
-
-            // Compact JSON context — only send what Gemini needs
-            String ctx = buildCompactContext(transactions,
-                    budgetRepository.findByUserId(userId).orElse(null));
-
-            String prompt = "Financial advisor. Analyze this user data and return JSON ONLY (no markdown):\n" + ctx +
-                    "\nReturn: {\"summary\":\"2 sentences\",\"recommendations\":[\"3-5 specific tips\"],\"patterns\":[\"2-3 key patterns\"],\"topCategories\":[\"Cat: $amt\"]}";
-
-            return parseJsonArray(geminiClient.generateContent(prompt));
-
-        } catch (Exception e) {
-            log.error("Error detecting anomalies for user: {}", userId, e);
-            return List.of("Unable to detect anomalies at this time");
+            return objectMapper.writeValueAsString(list != null ? list : List.of());
+        } catch (JsonProcessingException e) {
+            return "[]";
         }
     }
 
-    /**
-     * Generate budget recommendations using AI
-     */
-    public List<String> generateBudgetRecommendations(UUID userId) {
-        log.info("Generating budget recommendations for user: {}", userId);
-
+    private List<String> fromJson(String json) {
+        if (json == null || json.isBlank())
+            return List.of();
         try {
-            LocalDateTime startDate = LocalDateTime.now().minusDays(90);
-            List<Transaction> transactions = transactionRepository
-                    .findByUserIdAndDateAfterOrderByDateDesc(userId, startDate);
-
-            Budget budget = budgetRepository.findByUserId(userId).orElse(null);
-
-            String ctx = buildCompactContext(transactions, budget);
-
-            String prompt = "Give 3-5 specific budget recommendations. Data:\n" + ctx +
-                    "\nReturn JSON array only (no markdown): [\"tip1\",\"tip2\"]";
-
-            return parseJsonArray(geminiClient.generateContent(prompt));
-
-        } catch (Exception e) {
-            log.error("Error generating budget recommendations for user: {}", userId, e);
-            return List.of("Unable to generate recommendations at this time");
+            return objectMapper.readValue(json, new TypeReference<>() {
+            });
+        } catch (JsonProcessingException e) {
+            return List.of();
         }
     }
 
-    // ==================== Helper Methods ====================
+    // ==================== Helpers ====================
 
-    /**
-     * Builds a compact JSON context string to minimize tokens sent to Gemini.
-     * Instead of verbose text, we send only the key numbers as JSON.
-     */
     private String buildCompactContext(List<Transaction> transactions, Budget budget) {
-        // Category totals (EXPENSE only)
         Map<String, BigDecimal> expenseByCategory = transactions.stream()
                 .filter(t -> t.getType() == TransactionType.EXPENSE)
                 .collect(Collectors.groupingBy(
@@ -174,25 +244,20 @@ public class AiInsightsService {
 
     private String buildInsightsPrompt(String ctx) {
         return "Financial advisor. Analyze this user data and return JSON ONLY (no markdown):\n" + ctx +
-                "\nReturn: {\"summary\":\"2 sentences\",\"recommendations\":[\"3-5 specific tips\"],\"patterns\":[\"2-3 key patterns\"],\"topCategories\":[\"Cat: $amt\"]}";
+                "\nReturn: {\"summary\":\"2 sentences\",\"recommendations\":[\"3-5 specific tips\"]," +
+                "\"patterns\":[\"2-3 key patterns\"],\"topCategories\":[\"Cat: $amt\"]}";
     }
 
     private SpendingInsightResponse parseInsightsResponse(String aiResponse) {
         try {
-            // Extract first JSON object from the response (handles markdown, preamble text,
-            // etc.)
             String jsonContent = extractJsonObject(aiResponse);
-
-            // Parse JSON
             Map<String, Object> responseMap = objectMapper.readValue(jsonContent, Map.class);
-
             return SpendingInsightResponse.builder()
                     .summary((String) responseMap.get("summary"))
                     .recommendations((List<String>) responseMap.getOrDefault("recommendations", List.of()))
                     .patterns((List<String>) responseMap.getOrDefault("patterns", List.of()))
                     .topCategories((List<String>) responseMap.getOrDefault("topCategories", List.of()))
                     .build();
-
         } catch (JsonProcessingException e) {
             log.error("Error parsing AI insights response: {}", e.getMessage());
             return SpendingInsightResponse.builder()
@@ -204,41 +269,23 @@ public class AiInsightsService {
 
     private List<String> parseJsonArray(String aiResponse) {
         try {
-            String jsonContent = extractJsonArray(aiResponse);
-            return objectMapper.readValue(jsonContent, List.class);
+            return objectMapper.readValue(extractJsonArray(aiResponse), new TypeReference<>() {
+            });
         } catch (JsonProcessingException e) {
             log.error("Error parsing JSON array from AI response: {}", e.getMessage());
             return List.of(aiResponse.length() > 200 ? aiResponse.substring(0, 200) : aiResponse);
         }
     }
 
-    /**
-     * Extracts the first JSON object {...} from a string that may contain markdown
-     * or other text.
-     */
     private String extractJsonObject(String text) {
-        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("\\{[\\s\\S]*\\}",
-                java.util.regex.Pattern.DOTALL);
-        java.util.regex.Matcher matcher = pattern.matcher(text);
-        if (matcher.find()) {
-            return matcher.group();
-        }
-        // Fallback: strip markdown fences and return
-        return text.replaceAll("(?s)```json\\s*", "").replaceAll("```", "").trim();
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile("\\{[\\s\\S]*\\}", java.util.regex.Pattern.DOTALL);
+        java.util.regex.Matcher m = p.matcher(text);
+        return m.find() ? m.group() : text.replaceAll("(?s)```json\\s*", "").replaceAll("```", "").trim();
     }
 
-    /**
-     * Extracts the first JSON array [...] from a string that may contain markdown
-     * or other text.
-     */
     private String extractJsonArray(String text) {
-        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("\\[[\\s\\S]*\\]",
-                java.util.regex.Pattern.DOTALL);
-        java.util.regex.Matcher matcher = pattern.matcher(text);
-        if (matcher.find()) {
-            return matcher.group();
-        }
-        // Fallback: strip markdown fences and return
-        return text.replaceAll("(?s)```json\\s*", "").replaceAll("```", "").trim();
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile("\\[[\\s\\S]*\\]", java.util.regex.Pattern.DOTALL);
+        java.util.regex.Matcher m = p.matcher(text);
+        return m.find() ? m.group() : text.replaceAll("(?s)```json\\s*", "").replaceAll("```", "").trim();
     }
 }

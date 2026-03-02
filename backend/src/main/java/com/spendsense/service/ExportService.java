@@ -44,6 +44,9 @@ public class ExportService {
     @Value("${server.servlet.context-path:/api/v1}")
     private String contextPath;
 
+    @Value("${app.backend-url:http://localhost:8080}")
+    private String backendUrl;
+
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     /**
@@ -142,9 +145,9 @@ public class ExportService {
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
 
             document.add(new Paragraph("Summary:").setBold());
-            document.add(new Paragraph("Total Income: $" + totalIncome));
-            document.add(new Paragraph("Total Expense: $" + totalExpense));
-            document.add(new Paragraph("Net: $" + totalIncome.subtract(totalExpense)));
+            document.add(new Paragraph("Total Income: \u20B9" + totalIncome));
+            document.add(new Paragraph("Total Expense: \u20B9" + totalExpense));
+            document.add(new Paragraph("Net: \u20B9" + totalIncome.subtract(totalExpense)));
             document.add(new Paragraph("Total Transactions: " + transactions.size()));
             document.add(new Paragraph("\n"));
 
@@ -170,7 +173,7 @@ public class ExportService {
                 table.addCell(new Cell()
                         .add(new Paragraph(transaction.getDescription() != null ? transaction.getDescription() : "-")
                                 .setFontSize(9)));
-                table.addCell(new Cell().add(new Paragraph("$" + transaction.getAmount()).setFontSize(9)));
+                table.addCell(new Cell().add(new Paragraph("\u20B9" + transaction.getAmount()).setFontSize(9)));
                 table.addCell(new Cell().add(new Paragraph(transaction.getAccount().getName()).setFontSize(9)));
                 table.addCell(new Cell().add(new Paragraph(transaction.getStatus().toString()).setFontSize(9)));
             }
@@ -223,7 +226,7 @@ public class ExportService {
 
             // Store the export and return a real download URL
             fileStorageService.storeExport(exportData, fileName);
-            String downloadUrl = contextPath + "/export/download/" + fileName;
+            String downloadUrl = backendUrl + contextPath + "/export/download/" + fileName;
 
             emailService.sendExportReadyEmail(
                     user.getEmail(),

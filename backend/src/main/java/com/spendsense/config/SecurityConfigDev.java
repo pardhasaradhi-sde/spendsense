@@ -19,7 +19,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import java.util.Arrays;
+import  java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
@@ -54,6 +54,8 @@ public class SecurityConfigDev {
                                                 .requestMatchers("/health").permitAll()
                                                 .requestMatchers("/actuator/health").permitAll()
                                                 .requestMatchers("/webhooks/**").permitAll()
+                                                // Export download links are sent via email and opened in browser
+                                                .requestMatchers("/export/download/**").permitAll()
                                                 .requestMatchers(
                                                                 "/swagger-ui/**",
                                                                 "/api-docs/**",

@@ -118,6 +118,9 @@ public class FileStorageService {
     public String getFileMimeType(String filename) {
         try {
             Path filePath = receiptStorageLocation.resolve(filename).normalize();
+            if (!filePath.startsWith(receiptStorageLocation)) {
+                throw new BadRequestException("Invalid file path");
+            }
             byte[] fileBytes = Files.readAllBytes(filePath);
             return tika.detect(fileBytes);
         } catch (IOException ex) {
@@ -132,6 +135,9 @@ public class FileStorageService {
     public void deleteReceipt(String filename) {
         try {
             Path filePath = receiptStorageLocation.resolve(filename).normalize();
+            if (!filePath.startsWith(receiptStorageLocation)) {
+                throw new BadRequestException("Invalid file path");
+            }
             Files.deleteIfExists(filePath);
             log.info("Receipt deleted: {}", filename);
         } catch (IOException ex) {
@@ -144,7 +150,10 @@ public class FileStorageService {
      */
     public String storeExport(byte[] data, String filename) {
         try {
-            Path targetLocation = exportStorageLocation.resolve(filename);
+            Path targetLocation = exportStorageLocation.resolve(filename).normalize();
+            if (!targetLocation.startsWith(exportStorageLocation)) {
+                throw new BadRequestException("Invalid export filename");
+            }
             Files.write(targetLocation, data);
             log.info("Export file stored: {}", filename);
             return filename;
@@ -152,6 +161,37 @@ public class FileStorageService {
             log.error("Could not store export file", ex);
             throw new RuntimeException("Could not store export file", ex);
         }
+    }
+
+    /**
+     * Delete export files older than {@code retentionHours} hours.
+     * Called by CleanupScheduler weekly (configurable).
+     *
+     * @return number of files deleted
+     */
+    public int deleteOldExports(int retentionHours) {
+        int deleted = 0;
+        try {
+            long cutoffMillis = System.currentTimeMillis() - (long) retentionHours * 3600 * 1000;
+            try (var stream = Files.list(exportStorageLocation)) {
+                for (Path file : stream.toList()) {
+                    try {
+                        if (Files.isRegularFile(file) &&
+                                Files.getLastModifiedTime(file).toMillis() < cutoffMillis) {
+                            Files.delete(file);
+                            deleted++;
+                            log.debug("Deleted expired export file: {}", file.getFileName());
+                        }
+                    } catch (IOException e) {
+                        log.warn("Could not delete export file {}: {}", file.getFileName(), e.getMessage());
+                    }
+                }
+            }
+        } catch (IOException e) {
+            log.error("Error listing exports directory for cleanup", e);
+        }
+        log.info("Export cleanup complete. Deleted {} expired file(s).", deleted);
+        return deleted;
     }
 
     /**

@@ -12,7 +12,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -47,7 +46,7 @@ public class UserService {
         user.setEmail(clerkData.getEmail());
         user.setName(buildFullName(clerkData.getFirstName(), clerkData.getLastName()));
         user.setImageUrl(clerkData.getImageUrl());
-        user.setUpdatedAt(LocalDateTime.now());
+        // @UpdateTimestamp on the entity handles updatedAt automatically
 
         return userRepository.save(user);
     }
@@ -83,7 +82,7 @@ public class UserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User Not found"));
         user.setRole(role);
-        user.setUpdatedAt(LocalDateTime.now());
+        // @UpdateTimestamp on the entity handles updatedAt automatically
         return userRepository.save(user);
     }
 
