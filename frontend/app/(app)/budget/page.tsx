@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { Target, Pencil, Trash2, AlertTriangle } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
-import type { BudgetResponse, AnalyticsResponse } from "@/types/api";
+import type { BudgetResponse } from "@/types/api";
 
 function BudgetForm({
   defaultAmount,
@@ -66,12 +66,6 @@ export default function BudgetPage() {
     },
   });
 
-  const { data: analytics } = useQuery({
-    queryKey: ["analytics", 1],
-    queryFn: () => apiFetch<AnalyticsResponse>("/analytics?months=1", getToken),
-    enabled: !!budget,
-  });
-
   const createMutation = useMutation({
     mutationFn: (amount: number) =>
       apiFetch<BudgetResponse>("/budget", getToken, { method: "POST", body: JSON.stringify({ amount }) }),
@@ -101,8 +95,8 @@ export default function BudgetPage() {
   });
 
   const hasBudget = !!budget && !error;
-  const spent = analytics?.totalExpense ?? 0;
-  const pct = hasBudget && budget ? Math.min((spent / budget.amount) * 100, 100) : 0;
+  const spent = budget?.spentThisMonth ?? 0;
+  const pct = budget?.percentUsed ?? 0;
   const isOverBudget = hasBudget && budget && spent > budget.amount;
   const isNearLimit = pct >= 80 && !isOverBudget;
 
@@ -211,7 +205,7 @@ export default function BudgetPage() {
                       ? "bg-[var(--warning)]"
                       : "bg-black"
                   }`}
-                  style={{ width: `${pct}%` }}
+                  style={{ width: `${Math.min(pct, 100)}%` }}
                 />
               </div>
               <div className="flex justify-between text-[11px] text-[var(--muted-foreground)]">

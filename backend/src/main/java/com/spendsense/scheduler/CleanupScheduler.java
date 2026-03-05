@@ -22,7 +22,7 @@ public class CleanupScheduler {
     @Value("${export.temp-file-retention-hours:24}")
     private int retentionHours;
 
-    @Scheduled(cron = "${scheduling.cleanup.cron}")
+    @Scheduled(cron = "${scheduling.cleanup.cron}", zone = "Asia/Kolkata")
     public void cleanupExpiredExports() {
         log.info("Starting export file cleanup job (retention: {} hours)", retentionHours);
         int deleted = fileStorageService.deleteOldExports(retentionHours);

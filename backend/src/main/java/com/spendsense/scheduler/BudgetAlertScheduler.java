@@ -17,7 +17,7 @@ public class BudgetAlertScheduler {
 
     private final BudgetAlertService budgetAlertService;
 
-    @Scheduled(cron = "${scheduling.budget-alerts.cron}")
+    @Scheduled(cron = "${scheduling.budget-alerts.cron}", zone = "Asia/Kolkata")
     public void checkBudgetsAndSendAlerts() {
         log.info("Starting daily budget alert check job");
         budgetAlertService.checkBudgetsAndSendAlerts();

@@ -29,7 +29,7 @@ public class MonthlyInsightsScheduler {
      * Runs at 8:00 AM on the 1st of every month.
      * Generates AI insights for each user and sends them via email.
      */
-    @Scheduled(cron = "0 0 8 1 * ?")
+    @Scheduled(cron = "0 0 8 1 * ?", zone = "Asia/Kolkata")
     public void sendMonthlyInsightEmails() {
         log.info("Starting monthly AI insights email job...");
 

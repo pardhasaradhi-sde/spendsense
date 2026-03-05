@@ -49,7 +49,7 @@ public class RecurringTransactionScheduler {
      * Running 4× per day ensures daily transactions are never missed due to
      * timing, and weekly/monthly ones are caught promptly.
      */
-    @Scheduled(cron = "${scheduling.recurring-transactions.cron}")
+    @Scheduled(cron = "${scheduling.recurring-transactions.cron}", zone = "Asia/Kolkata")
     @Transactional
     public void processRecurringTransactions() {
         log.info("Starting recurring transaction processing job");

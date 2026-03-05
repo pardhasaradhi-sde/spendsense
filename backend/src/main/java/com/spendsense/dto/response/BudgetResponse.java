@@ -16,6 +16,8 @@ import java.util.UUID;
 public class BudgetResponse {
     private UUID id;
     private BigDecimal amount;
+    private BigDecimal spentThisMonth;   // current calendar month expenses (IST)
+    private double percentUsed;          // spentThisMonth / amount × 100
     private LocalDateTime lastAlertSent;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

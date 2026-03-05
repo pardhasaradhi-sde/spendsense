@@ -31,7 +31,7 @@ public class BudgetAlertService {
     // Alert thresholds
     private static final int WARNING_THRESHOLD = 80; // 80% of budget → send alert
     private static final int CRITICAL_THRESHOLD = 95; // 95% of budget → log critical warning
-    private static final int ALERT_COOLDOWN_HOURS = 24;
+    private static final int ALERT_COOLDOWN_HOURS = 168; // 7 days — max one alert per week
 
     /**
      * Check all budgets and send alerts where spending >= 80% of the monthly limit.
@@ -73,7 +73,7 @@ public class BudgetAlertService {
         if (budget.getLastAlertSent() != null) {
             LocalDateTime cooldownTime = budget.getLastAlertSent().plusHours(ALERT_COOLDOWN_HOURS);
             if (LocalDateTime.now().isBefore(cooldownTime)) {
-                log.debug("Budget {} is in alert cooldown period", budget.getId());
+                log.info("Budget {} is in cooldown until {}", budget.getId(), cooldownTime);
                 return false;
             }
         }
@@ -86,7 +86,8 @@ public class BudgetAlertService {
         double percentUsed = totalSpent.divide(budget.getAmount(), 4, RoundingMode.HALF_UP)
                 .multiply(BigDecimal.valueOf(100)).doubleValue();
 
-        log.debug("Budget {} usage: {}%", budget.getId(), percentUsed);
+        log.info("Budget {} usage: {}% (threshold: {}%)", budget.getId(),
+                String.format("%.1f", percentUsed), WARNING_THRESHOLD);
         if (percentUsed >= CRITICAL_THRESHOLD) {
             log.warn("CRITICAL: Budget {} is {}% consumed (>={}%)", budget.getId(),
                     String.format("%.1f", percentUsed), CRITICAL_THRESHOLD);
@@ -107,6 +108,10 @@ public class BudgetAlertService {
 
         try {
             if (user.getEmail() != null && !user.getEmail().isEmpty()) {
+                // Set lastAlertSent BEFORE async call so cooldown is respected even if email fails
+                budget.setLastAlertSent(LocalDateTime.now());
+                budgetRepository.save(budget);
+
                 emailService.sendBudgetAlertEmail(
                         user.getEmail(),
                         user.getName() != null ? user.getName() : "User",
@@ -115,9 +120,7 @@ public class BudgetAlertService {
                         String.format("%.2f", remaining),
                         String.format("%.1f", percentUsed));
 
-                budget.setLastAlertSent(LocalDateTime.now());
-                budgetRepository.save(budget);
-                log.info("Budget alert email sent to user {} ({})", user.getId(), user.getEmail());
+                log.info("Budget alert dispatched to user {} ({})", user.getId(), user.getEmail());
             } else {
                 log.warn("User {} has no email address, skipping alert", user.getId());
             }
@@ -126,15 +129,18 @@ public class BudgetAlertService {
         }
     }
 
-    /** Returns total EXPENSE-only spending for the current calendar month */
+    /** Returns total EXPENSE-only spending for the current calendar month (IST) */
     private BigDecimal getMonthlyExpenses(java.util.UUID userId) {
-        LocalDateTime startOfMonth = LocalDateTime.now()
+        java.time.ZoneId ist = java.time.ZoneId.of("Asia/Kolkata");
+        LocalDateTime startOfMonth = LocalDateTime.now(ist)
                 .withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
-        return transactionRepository
+        BigDecimal total = transactionRepository
                 .findByUserIdAndDateAfterOrderByDateDesc(userId, startOfMonth)
                 .stream()
                 .filter(t -> t.getType() == com.spendsense.model.enums.TransactionType.EXPENSE)
                 .map(Transaction::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        log.info("Monthly expenses for user {} since {}: {}", userId, startOfMonth, total);
+        return total;
     }
 }

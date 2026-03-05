@@ -87,6 +87,8 @@ export interface UpdateTransactionRequest {
 export interface BudgetResponse {
   id: string;
   amount: number;
+  spentThisMonth: number;   // current calendar month expenses (IST)
+  percentUsed: number;      // spentThisMonth / amount × 100
   lastAlertSent: string | null;
   createdAt: string;
   updatedAt: string;
