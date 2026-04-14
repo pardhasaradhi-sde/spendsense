@@ -317,66 +317,96 @@ Frontend URL: `http://localhost:3000`
 
 ## API Reference
 
-**Base URL:** `http://localhost:8080/api/v1`
+**Backend base URL:** `http://localhost:8080/api/v1`  
+**Auth:** `Authorization: Bearer <JWT>` on all protected endpoints
 
 ### Public Endpoints
-- `GET /health`
-- `GET /actuator/health`
-- `POST /webhooks/clerk`
-- `GET /export/download/{filename}`
 
-### Authenticated Endpoints
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/health` | Public | Basic app health check |
+| `GET` | `/actuator/health` | Public | Spring Actuator health status |
+| `POST` | `/webhooks/clerk` | Public (signed webhook) | Clerk user sync webhook (`user.created`, `user.updated`, `user.deleted`) |
+| `GET` | `/export/download/{filename}` | Public | Download export file from email link |
 
-#### Users
-- `GET /users/me`
+### Users
 
-#### Accounts
-- `POST /accounts`
-- `GET /accounts`
-- `GET /accounts/{id}`
-- `PUT /accounts/{id}`
-- `DELETE /accounts/{id}`
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/users/me` | Protected | Get current authenticated user profile |
 
-#### Transactions
-- `POST /transactions`
-- `GET /transactions`
-- `GET /transactions/account/{accountId}`
-- `GET /transactions/{id}`
-- `PUT /transactions/{id}`
-- `DELETE /transactions/{id}`
+### Accounts
 
-#### Budget
-- `POST /budget`
-- `GET /budget`
-- `PUT /budget`
-- `DELETE /budget`
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `POST` | `/accounts` | Protected | Create account |
+| `GET` | `/accounts` | Protected | List all user accounts |
+| `GET` | `/accounts/{id}` | Protected | Get account by ID |
+| `PUT` | `/accounts/{id}` | Protected | Update account |
+| `DELETE` | `/accounts/{id}` | Protected | Delete account |
 
-#### Analytics
-- `GET /analytics`
-- `GET /analytics/trends`
-- `GET /analytics/categories`
-- `GET /analytics/comparison`
+### Transactions
 
-#### AI Insights
-- `GET /ai/insights`
-- `POST /ai/insights/refresh`
-- `GET /ai/insights/anomalies`
-- `GET /ai/insights/recommendations`
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `POST` | `/transactions` | Protected | Create transaction |
+| `GET` | `/transactions` | Protected | List transactions (paginated) |
+| `GET` | `/transactions/account/{accountId}` | Protected | List transactions for one account |
+| `GET` | `/transactions/{id}` | Protected | Get transaction by ID |
+| `PUT` | `/transactions/{id}` | Protected | Update transaction |
+| `DELETE` | `/transactions/{id}` | Protected | Delete transaction |
 
-#### Receipts
-- `POST /receipts/scan` (multipart)
-- `GET /receipts/{filename}`
-- `DELETE /receipts/{filename}`
+### Budget
 
-#### Export
-- `GET /export/csv`
-- `GET /export/pdf`
-- `POST /export/email`
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `POST` | `/budget` | Protected | Create budget |
+| `GET` | `/budget` | Protected | Get current user budget |
+| `PUT` | `/budget` | Protected | Update budget |
+| `DELETE` | `/budget` | Protected | Delete budget |
 
-#### Admin (ADMIN role)
-- `GET /admin/users`
-- `PATCH /admin/users/{id}/role?role=USER|ADMIN`
-- `DELETE /admin/users/{id}`
+### Analytics
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/analytics` | Protected | Get analytics summary (supports `months`, `refresh`) |
+| `GET` | `/analytics/trends` | Protected | Monthly trends |
+| `GET` | `/analytics/categories` | Protected | Category-wise spending analysis |
+| `GET` | `/analytics/comparison` | Protected | Current vs previous month comparison |
+
+### AI Insights
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/ai/insights` | Protected | Get AI insights (cached or fresh) |
+| `POST` | `/ai/insights/refresh` | Protected | Force refresh AI insights |
+| `GET` | `/ai/insights/anomalies` | Protected | Detect unusual spending patterns |
+| `GET` | `/ai/insights/recommendations` | Protected | Get AI budget recommendations |
+
+### Receipts
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `POST` | `/receipts/scan` | Protected | Upload receipt image and extract transaction data |
+| `GET` | `/receipts/{filename}` | Protected | Download stored receipt image |
+| `DELETE` | `/receipts/{filename}` | Protected | Delete stored receipt image |
+
+### Export
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/export/csv` | Protected | Export transactions as CSV |
+| `GET` | `/export/pdf` | Protected | Export transactions as PDF |
+| `POST` | `/export/email` | Protected | Generate export and send download link via email |
+| `GET` | `/export/download/{filename}` | Public | Download generated export by filename |
+
+### Admin
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/admin/users` | Admin only | List all users |
+| `PATCH` | `/admin/users/{id}/role?role=USER|ADMIN` | Admin only | Update user role |
+| `DELETE` | `/admin/users/{id}` | Admin only | Delete user |
 
 ---
 
